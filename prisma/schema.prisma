@@ -1,0 +1,689 @@
+// PEAKLOOP — Prisma schema
+// Local demo runs on SQLite (file:./dev.db). For production, change the
+// provider below to "postgresql" and update DATABASE_URL. All models use
+// SQLite-safe scalar types (no enums / arrays / Json) so the schema is
+// portable: enum-like fields are String + app-level constants, and list
+// data is stored as JSON strings serialized in the app layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // -> postgresql in production
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// AUTH
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String?   @unique
+  emailVerified  DateTime?
+  image          String?
+  passwordHash   String?
+  role           String    @default("USER") // USER | VENDOR | ADMIN
+  accountType    String    @default("PERSONAL") // PERSONAL | BUSINESS
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  reviews        Review[]
+  favorites      Favorite[]
+  subscriptions  Subscription[]
+  comparisons    Comparison[]
+  notifications  Notification[]
+  apiKeys        APIKey[]
+  webhooks       Webhook[]
+  payments       Payment[]
+  invoices       Invoice[]
+
+  organizations  TeamMember[]
+  vendor         Vendor?
+  auditLogs      AuditLog[]
+
+  // 2FA / security
+  twoFactorSecret String?
+  twoFactorEnabled Boolean @default(false)
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// CATALOG
+// ---------------------------------------------------------------------------
+
+model Category {
+  id          String @id @default(cuid())
+  slug        String @unique
+  name        String
+  description String
+  icon        String @default("Box")
+  color       String @default("#22C55E")
+  order       Int    @default(0)
+  createdAt   DateTime @default(now())
+
+  tools       ToolCategory[]
+  blogPosts   BlogPost[]
+}
+
+model Tool {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  name           String
+  tagline        String
+  description    String
+  longDescription String @default("")
+  website        String
+  logo           String
+  color          String   @default("#22C55E")
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+
+  rating         Float    @default(0)
+  reviewCount    Int      @default(0)
+  startingPrice  Int      @default(0) // in cents per month
+  freePlan       Boolean  @default(false)
+  freeTrial      Boolean  @default(false)
+  verified       Boolean  @default(false)
+  aiPowered      Boolean  @default(false)
+  featured       Boolean  @default(false)
+  trending       Boolean  @default(false)
+  popularity     Int      @default(0)
+  releaseDate    DateTime @default(now())
+
+  companyName    String   @default("")
+  companySize    String   @default("1-10")
+  founded        Int?
+  headquarters   String   @default("")
+
+  pros           String   @default("[]") // JSON array of strings
+  cons           String   @default("[]")
+  faq            String   @default("[]") // JSON array of {q,a}
+  integrations   String   @default("[]") // JSON array of names
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  categories     ToolCategory[]
+  features       ToolFeature[]
+  pricing        ToolPricing[]
+  screenshots    ToolScreenshot[]
+  reviews        Review[]
+  deals          Deal[]
+  favorites      Favorite[]
+  comparisons    Comparison[]
+  vendorListing  VendorListing?
+
+  @@index([categoryId])
+  @@index([rating])
+  @@index([popularity])
+  @@index([releaseDate])
+}
+
+model ToolCategory {
+  toolId     String
+  categoryId String
+  tool       Tool     @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([toolId, categoryId])
+}
+
+model ToolFeature {
+  id          String @id @default(cuid())
+  toolId      String
+  tool        Tool   @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  order       Int    @default(0)
+}
+
+model ToolPricing {
+  id         String @id @default(cuid())
+  toolId     String
+  tool       Tool   @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  planName   String // Free | Starter | Professional | Business | Enterprise
+  monthly    Int    @default(0) // cents, 0 = free
+  annual     Int    @default(0) // cents per month billed annually
+  freePlan   Boolean @default(false)
+  freeTrial  Boolean @default(false)
+  popular    Boolean @default(false)
+  users      Int    @default(1)
+  storage    String @default("")
+  features   String @default("[]") // JSON array of strings
+  order      Int    @default(0)
+}
+
+model ToolScreenshot {
+  id      String @id @default(cuid())
+  toolId  String
+  tool    Tool   @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  url     String
+  caption String @default("")
+}
+
+// ---------------------------------------------------------------------------
+// INTEGRATIONS
+// ---------------------------------------------------------------------------
+
+model Integration {
+  id          String @id @default(cuid())
+  slug        String @unique
+  name        String
+  description String
+  icon        String @default("Plug")
+  color       String @default("#38BDF8")
+  category    String @default("Developer")
+  features    String @default("[]")
+  permissions String @default("[]")
+  popular     Boolean @default(false)
+  createdAt   DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// ENGAGEMENT
+// ---------------------------------------------------------------------------
+
+model Review {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  toolId         String
+  tool           Tool     @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  rating         Int
+  title          String
+  content        String
+  pros           String   @default("[]")
+  cons           String   @default("[]")
+  useCase        String   @default("")
+  companySize    String   @default("")
+  verificationType String @default("") // Verified User | Verified Purchase | Business User
+  verified       Boolean  @default(false)
+  status         String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  helpfulCount   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  votes          ReviewVote[]
+
+  @@index([toolId, status])
+  @@index([userId, toolId])
+}
+
+model ReviewVote {
+  id       String @id @default(cuid())
+  userId   String
+  reviewId String
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  vote     Int    @default(1) // 1 | -1
+  createdAt DateTime @default(now())
+
+  @@unique([userId, reviewId])
+}
+
+model Deal {
+  id          String   @id @default(cuid())
+  toolId      String?
+  tool        Tool?    @relation(fields: [toolId], references: [id])
+  title       String
+  description String   @default("")
+  discount    String   @default("")
+  originalPrice Int    @default(0) // cents/mo
+  currentPrice Int     @default(0) // cents/mo
+  coupon      String   @default("")
+  url         String   @default("")
+  category    String   @default("Productivity")
+  expiresAt   DateTime?
+  active      Boolean  @default(true)
+  featured    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  toolId    String
+  tool      Tool     @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, toolId])
+}
+
+model Comparison {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tools     String   @default("[]") // JSON array of tool slugs
+  createdAt DateTime @default(now())
+}
+
+model Subscription {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  logo         String   @default("")
+  color        String   @default("#22C55E")
+  priceMonthly Int      @default(0)
+  priceYearly  Int      @default(0)
+  billingCycle String   @default("MONTHLY") // MONTHLY | YEARLY
+  renewalDate  DateTime?
+  category     String   @default("Productivity")
+  active       Boolean  @default(true)
+  notes        String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String   @default("SYSTEM") // PRICE_DROP, DEAL, RENEWAL, REVIEW, CRM, ORDER, SUPPORT, AI, SECURITY, SYSTEM
+  link      String   @default("")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+// ---------------------------------------------------------------------------
+// ORGANIZATION / TEAM
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String @id @default(cuid())
+  name      String
+  industry  String @default("")
+  teamSize  String @default("1-10")
+  primaryGoal String @default("")
+  createdAt DateTime @default(now())
+
+  members   TeamMember[]
+}
+
+model TeamMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("VIEWER") // OWNER | ADMIN | MANAGER | SUPPORT | MARKETING | ANALYST | VIEWER
+  permissions    String       @default("{}") // JSON map of module -> [actions]
+  invitedAt      DateTime     @default(now())
+  status         String       @default("ACTIVE") // ACTIVE | INVITED | SUSPENDED
+
+  @@unique([organizationId, userId])
+}
+
+// ---------------------------------------------------------------------------
+// VENDOR
+// ---------------------------------------------------------------------------
+
+model Vendor {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName String
+  website     String   @default("")
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  listings    VendorListing[]
+}
+
+model VendorListing {
+  id         String   @id @default(cuid())
+  vendorId   String
+  vendor     Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  toolId     String   @unique
+  tool       Tool     @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  status     String   @default("DRAFT") // DRAFT | PENDING_REVIEW | APPROVED | REJECTED
+  message    String   @default("")
+  submittedAt DateTime @default(now())
+  reviewedAt DateTime?
+  views      Int      @default(0)
+  clicks     Int      @default(0)
+  conversions Int     @default(0)
+  favorites  Int      @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// CRM
+// ---------------------------------------------------------------------------
+
+model CRMContact {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  email      String
+  phone      String   @default("")
+  company    String   @default("")
+  title      String   @default("")
+  tags       String   @default("[]")
+  notes      String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model CRMCompany {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  industry  String   @default("")
+  size      String   @default("")
+  website   String   @default("")
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model CRMLead {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  email      String
+  phone      String   @default("")
+  source     String   @default("")
+  score      Int      @default(0) // AI lead score
+  stage      String   @default("Lead") // Lead | Qualified | Proposal | Negotiation | Won | Lost
+  value      Int      @default(0) // cents
+  owner      String   @default("")
+  notes      String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model CRMDeal {
+  id         String   @id @default(cuid())
+  userId     String
+  title      String
+  stage      String   @default("Lead") // Lead | Qualified | Proposal | Negotiation | Won | Lost
+  value      Int      @default(0) // cents
+  contact    String   @default("")
+  probability Int     @default(0)
+  owner      String   @default("")
+  notes      String   @default("")
+  closeDate  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model CRMTask {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  type      String   @default("TASK") // TASK | CALL | EMAIL | MEETING
+  done      Boolean  @default(false)
+  due       DateTime?
+  relatedTo String   @default("")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// SUPPORT
+// ---------------------------------------------------------------------------
+
+model SupportTicket {
+  id        String  @id @default(cuid())
+  userId    String
+  subject   String
+  status    String  @default("OPEN") // OPEN | IN_PROGRESS | WAITING | RESOLVED | CLOSED
+  priority  String  @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  tags      String  @default("[]")
+  assignee  String  @default("")
+  messages  SupportMessage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SupportMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    String        @default("")
+  body      String
+  fromAi    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// SOCIAL COMMERCE
+// ---------------------------------------------------------------------------
+
+model SocialAccount {
+  id        String   @id @default(cuid())
+  userId    String
+  platform  String   // Instagram | Facebook | WhatsApp | X | TikTok
+  handle    String
+  connected Boolean  @default(false)
+  followers Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  email     String
+  phone     String   @default("")
+  channel   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  sku        String   @default("")
+  price      Int      @default(0) // cents
+  cost       Int      @default(0) // cents
+  stock      Int      @default(0)
+  image      String   @default("")
+  category   String   @default("")
+  createdAt  DateTime @default(now())
+}
+
+model Order {
+  id          String  @id @default(cuid())
+  userId      String
+  customer    String  @default("")
+  status      String  @default("PENDING") // PENDING | PAID | SHIPPED | DELIVERED | CANCELLED | REFUNDED
+  total       Int     @default(0) // cents
+  channel     String  @default("")
+  paymentStatus String @default("PENDING")
+  items       String  @default("[]") // JSON array of {name, qty, price}
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// AUTOMATION
+// ---------------------------------------------------------------------------
+
+model Automation {
+  id        String               @id @default(cuid())
+  userId    String
+  name      String
+  description String             @default("")
+  active    Boolean              @default(true)
+  runs      Int                  @default(0)
+  createdAt DateTime             @default(now())
+  triggers  AutomationTrigger[]
+  actions   AutomationAction[]
+}
+
+model AutomationTrigger {
+  id          String       @id @default(cuid())
+  automationId String
+  automation  Automation   @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  type        String       // New customer created, etc.
+  value       String       @default("")
+  order       Int          @default(0)
+}
+
+model AutomationAction {
+  id          String       @id @default(cuid())
+  automationId String
+  automation  Automation   @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  type        String       // Add to CRM, Send welcome email, etc.
+  value       String       @default("")
+  order       Int          @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// API PLATFORM
+// ---------------------------------------------------------------------------
+
+model APIKey {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  key       String   @unique
+  prefix    String
+  permissions String @default("[]") // JSON array of scopes
+  lastUsed  DateTime?
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url       String
+  events    String   @default("[]")
+  secret    String   @default("")
+  active    Boolean  @default(true)
+  lastDelivery DateTime?
+  createdAt DateTime @default(now())
+}
+
+model UsageRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  method    String   @default("GET")
+  status    Int      @default(200)
+  latency   Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// BLOG
+// ---------------------------------------------------------------------------
+
+model BlogCategory {
+  id    String @id @default(cuid())
+  slug  String @unique
+  name  String
+  posts BlogPost[]
+}
+
+model BlogPost {
+  id            String        @id @default(cuid())
+  slug          String        @unique
+  title         String
+  excerpt       String
+  content       String
+  coverImage    String        @default("")
+  author        String        @default("PEAKLOOP Team")
+  categoryId    String?
+  category      BlogCategory? @relation(fields: [categoryId], references: [id])
+  tags          String        @default("[]")
+  relatedTools  String        @default("[]")
+  seoTitle      String        @default("")
+  metaDescription String       @default("")
+  featured      Boolean       @default(false)
+  published     Boolean       @default(true)
+  publishedAt   DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// PAYMENTS / BILLING / AUDIT
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount     Int
+  currency   String   @default("usd")
+  status     String   @default("SUCCEEDED") // SUCCEEDED | PENDING | FAILED | REFUNDED
+  plan       String   @default("FREE")
+  provider   String   @default("stripe")
+  providerId String   @default("")
+  createdAt  DateTime @default(now())
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  number    String   @unique
+  amount    Int
+  currency  String   @default("usd")
+  status    String   @default("PAID") // DRAFT | OPEN | PAID | VOID
+  dueDate   DateTime?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String   @default("")
+  entityId  String   @default("")
+  ip        String   @default("")
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+}
