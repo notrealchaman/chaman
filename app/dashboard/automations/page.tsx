@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Loader2, Play } from "lucide-react";
-import { PageHeader, StatCard } from "@/components/dashboard/ui";
-import { AutomationBuilder } from "@/components/dashboard/automation-builder";
+import { Loader2 } from "lucide-react";
+import { WorkflowEditor } from "@/components/dashboard/workflow-editor";
 import type { Automation } from "@/lib/types";
 
 export default function AutomationsPage() {
@@ -18,18 +17,11 @@ export default function AutomationsPage() {
   }
   useEffect(() => { load(); }, []);
 
-  const active = automations.filter((a) => a.active).length;
-  const runs = automations.reduce((a, aut) => a + aut.runs, 0);
+  if (loading) return <div className="flex h-[70vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div>
-      <PageHeader eyebrow="Automation" title="Automation Builder" description="Automate leads, orders, reviews and more." />
-      <div className="mb-6 grid grid-cols-3 gap-4">
-        <StatCard label="Workflows" value={automations.length} icon={<Zap className="h-5 w-5" />} />
-        <StatCard label="Active" value={active} icon={<Play className="h-5 w-5" />} accent="sky" />
-        <StatCard label="Total runs" value={runs.toLocaleString()} icon={<Zap className="h-5 w-5" />} accent="amber" />
-      </div>
-      {loading ? <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" /> : <AutomationBuilder automations={automations} onRefresh={load} />}
+    <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+      <WorkflowEditor automations={automations} onRefresh={load} />
     </div>
   );
 }

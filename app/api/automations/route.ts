@@ -31,7 +31,14 @@ export async function PUT(req: NextRequest) {
   const b = await req.json();
   const existing = get(`SELECT id FROM "Automation" WHERE id = ? AND userId = ?`, [b.id, session.user.id]);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  run(`UPDATE "Automation" SET active = ?, name = ? WHERE id = ?`, [b.active === false ? 0 : 1, b.name || b.id, b.id]);
+  run(`UPDATE "Automation" SET active = ?, name = ?, description = ? WHERE id = ?`, [b.active === false ? 0 : 1, b.name || b.id, b.description || "", b.id]);
+  // Rewrite the graph (triggers/actions) when provided.
+  if (Array.isArray(b.triggers) || Array.isArray(b.actions)) {
+    run(`DELETE FROM "AutomationTrigger" WHERE automationId = ?`, [b.id]);
+    run(`DELETE FROM "AutomationAction" WHERE automationId = ?`, [b.id]);
+    (b.triggers || []).forEach((t: string, i: number) => insert("AutomationTrigger", { automationId: b.id, type: t, value: "", order: i }));
+    (b.actions || []).forEach((a: string, i: number) => insert("AutomationAction", { automationId: b.id, type: a, value: "", order: i }));
+  }
   return NextResponse.json({ ok: true });
 }
 

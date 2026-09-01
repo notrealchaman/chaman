@@ -44,14 +44,14 @@ const groups: Group[] = [
       { label: "Support", href: "/dashboard/support", icon: Headphones },
       { label: "Social", href: "/dashboard/social", icon: Share2 },
       { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-      { label: "Automation", href: "/dashboard/automation", icon: Workflow },
+      { label: "Automation", href: "/dashboard/automations", icon: Workflow },
     ],
   },
   {
     label: "Platform",
     items: [
       { label: "Integrations", href: "/dashboard/integrations", icon: Plug },
-      { label: "API", href: "/dashboard/api", icon: KeyRound },
+      { label: "API Keys", href: "/dashboard/integrations", icon: KeyRound },
       { label: "Notifications", href: "/dashboard/notifications", icon: Bell },
       { label: "Team", href: "/dashboard/team", icon: Users },
       { label: "Security", href: "/dashboard/security", icon: Shield },
